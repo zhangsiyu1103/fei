@@ -106,11 +106,11 @@ Available metrics:
 - `overlap`: Unit activation overlap (activated/inactivated neurons)
 - `correlation`: Activation correlation
 - `cosine`: Cosine similarity between activations
+```
 
+### Evaluation Metrics
 
-## Evaluation Metrics
-
-### Perturbation Metrics
+## Perturbation Metrics
 
 The code implements insertion and deletion game metrics with multiple substrates:
 
@@ -119,7 +119,7 @@ The code implements insertion and deletion game metrics with multiple substrates
 
 Metrics compute Area Under Curve (AUC) scores to evaluate attribution quality.
 
-### Intermediate Layer Metrics
+## Intermediate Layer Metrics
 
 - **MSE**: Mean squared error between original and perturbed activations
 - **Unit Overlap**: Ratio of activated/inactivated neurons that remain in the same state
