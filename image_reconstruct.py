@@ -1,29 +1,12 @@
-#
-# Copyright (c) Microsoft Corporation.
-#
-
-#
-# Methods for compressing a network using an ensemble of interpolants
-#
-
-import sys
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import os
 import time
 import argparse
-import random
-from wrapper import Wrapper
 import utils
-from eval_metric import eval_single_perturbation
-from datasets import *
+from datasets import get_dataset, select_data
 from explain import image_recover
 
-def eval_clipping(args):
-    device ="cuda" if torch.cuda.is_available() else "cpu"
+def image_reconstruct(args):
     model = utils.load_model(args.model)
 
     for param in model.parameters():
@@ -31,9 +14,10 @@ def eval_clipping(args):
 
     cur_set = get_dataset(args.dataset)
 
-    metric_model = nn.Sequential(model, nn.Softmax(dim = 1))
-
-    all_idxs = np.loadtxt('data_index.txt', int, delimiter=",")
+    if args.dataset == "cub":
+        all_idxs = np.loadtxt('data_index_cub.txt', int, delimiter=",")
+    elif args.dataset == "imagenet":
+        all_idxs = np.loadtxt('data_index_imagenet.txt', int, delimiter=",")
     
     save_dir = os.path.join(args.save_dir, "{}_{}_{}".format(args.model, args.dataset,args.defense_mode))
 
@@ -43,20 +27,16 @@ def eval_clipping(args):
     result = dict()
     result["idxs"]=all_idxs
     
-    for i, idx in enumerate(all_idxs):
+    for idx in all_idxs:
         cur_dir = os.path.join(save_dir, str(idx))
 
         if not os.path.exists(cur_dir):
             os.makedirs(cur_dir)
 
-        img, data_target, model_target = select_data(cur_set, idx, model)
+        img, _, model_target = select_data(cur_set, idx, model)
         image_recover(model, img, model_target, defense_mode = args.defense_mode, save_dir = cur_dir)
 
 
-
-        torch.save(result,"{}/result.pth".format(save_dir))
-
-    #torch.save(selected,"selected.pth")
 
 
 
@@ -75,12 +55,10 @@ def main():
 
     
     s = time.time()
-    eval_clipping(args)
+    image_reconstruct(args)
     e = time.time()
     print("total time: ", e-s)
-    #except:
-    #    print("error")
-    #    exit(1)
+
 
 
 if __name__ == '__main__':

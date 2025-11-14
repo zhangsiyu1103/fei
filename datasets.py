@@ -1,17 +1,11 @@
-#import numpy
-
-#from tensorflow.keras.models import load_model
 import torch
 from torchvision import datasets, transforms
 import torchray.benchmark.datasets as dats
 import torchray.benchmark.models as pmodels
 import os
-import cv2
-import utils
+from cub_tools.transforms import makeDefaultTransforms
 
-# LOAD IMAGES FROM EXISTING DATASET OR LOCAL DISK
-
-def get_dataset(dataset_name):
+def get_dataset(dataset_name, train=False):
     if dataset_name == 'imagenet':
         datadir = os.environ["IMAGENETDIR"]
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -22,14 +16,16 @@ def get_dataset(dataset_name):
             transforms.ToTensor(),
             normalize,
             ])
-
-        datadir = os.path.join(datadir, "val")
+        if train:
+            datadir = os.path.join(datadir, "train")
+        else:
+            datadir = os.path.join(datadir, "val")
 
         cur_data = datasets.ImageFolder(
                 datadir,
                 cur_transform
                 )
-    
+
     elif dataset_name == 'cifar10':
         datadir = './data'
         normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])
@@ -38,65 +34,87 @@ def get_dataset(dataset_name):
             transforms.ToTensor(),
             normalize,
             ])
+        if train:
+            cur_data = datasets.CIFAR10(datadir, train=True, download=True, transform=cur_transform)
+        else:
+            cur_data = datasets.CIFAR10(datadir, train=False, download=True, transform=cur_transform)
 
-        cur_data = datasets.CIFAR10(datadir, train = False, download = True, transform = cur_transform)
 
     elif dataset_name == "coco":
         transform = pmodels.get_transform("coco")
-        cur_data = dats.get_dataset("coco","val2014", transform = transform)
+        cur_data = dats.get_dataset("coco", "val2014", transform=transform)
     elif dataset_name == "voc":
         transform = pmodels.get_transform("voc")
-        cur_data = dats.get_dataset("voc_2007",subset = 'test', transform = transform)
+        cur_data = dats.get_dataset("voc_2007", subset='test', transform=transform)
 
+    elif dataset_name == "cub":
+        datadir = os.environ.get("CUBDIR")
+        if datadir is None:
+            raise RuntimeError("CUBDIR env var not set (path to CUB_200_2011)")
+        data_transforms = makeDefaultTransforms()
+        if train:
+            cur_data = datasets.ImageFolder(os.path.join(datadir, 'images', 'train'), data_transforms['train'])
+        else:
+            cur_data = datasets.ImageFolder(os.path.join(datadir, 'images', 'test'), data_transforms['test'])
     else:
         raise RuntimeError("dataset not supported")
     return cur_data
 
-def select_data(dataset, idx,  model):
-
-
-    device ="cuda" if torch.cuda.is_available() else "cpu"
+def select_data(dataset, idx, model):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     imgs, data_category = dataset[idx]
     imgs = imgs.unsqueeze(0).to(device)
     with torch.no_grad():
-        model_category = model(imgs).max(1)[1]
+        model_category = model(imgs).max(1)[1].item()
 
     return imgs, data_category, model_category
 
 
 
-def read_img(args):
-    img = cv2.imread(config["data_path"], 1)
-    img = cv2.resize(img, (224, 224))
-    img = np.float32(img) / 255
-    img = img[: , :, ::-1].copy()
-    img = utils.numpy_to_tensor(img)
-    return img
+def select_category(dataset, category, model):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    targets = torch.tensor(dataset.targets)
+    idxs = torch.argwhere(targets == category).squeeze().cpu().numpy().tolist()
+    inputs = []
+    chosen_idxs = []
+    for i in idxs:
+        img, target = dataset[i]
+        if target == category:
+            img_batch = img.unsqueeze(0).to(device)
+            with torch.no_grad():
+                model_target = model(img_batch).max(1)[1]
+            if model_target.item() == target:
+                inputs.append(img_batch)
+                chosen_idxs.append(i)
+            else:
+                print(i)
+
+    subset = torch.utils.data.Subset(dataset, list(chosen_idxs))
+    imgs = torch.cat(inputs)
+    return imgs, subset, chosen_idxs
 
 
 VOC_CLASSES = [
-        'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
-        'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
-        'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor',
-        ]
-"""List of the 20 PASCAL VOC class names."""
+    'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+    'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
+    'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor',
+]
 
 COCO_CLASSES = [
         'person', 'bicycle', 'car', 'motorbike', 'aeroplane', 'bus', 'train',
         'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
         'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-        'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag',
-        'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
-        'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
-        'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon',
-        'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot',
-        'hot dog', 'pizza', 'donut', 'cake', 'chair', 'sofa', 'pottedplant', 'bed',
-        'diningtable', 'toilet', 'tvmonitor', 'laptop', 'mouse', 'remote',
-        'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
-        'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
-        'hair drier', 'toothbrush',
-        ]
-"""List of the 80 COCO class names."""
+    'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag',
+    'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
+    'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
+    'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon',
+    'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot',
+    'hot dog', 'pizza', 'donut', 'cake', 'chair', 'sofa', 'pottedplant', 'bed',
+    'diningtable', 'toilet', 'tvmonitor', 'laptop', 'mouse', 'remote',
+    'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+    'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
+    'hair drier', 'toothbrush',
+]
 
 _COCO_CLASS_TO_INDEX = {c: i for i, c in enumerate([
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17,
@@ -111,13 +129,11 @@ def FromVOCToClasses(label):
     objs = label['annotation']['object']
     if not isinstance(objs, list):
         objs = [objs]
-    classes = [VOC_CLASSES.index(obj['name'])
-            for obj in objs]
+    classes = [VOC_CLASSES.index(obj['name']) for obj in objs]
     return classes
 
 def FromCocoToClasses(label):
-    classes = [_COCO_CLASS_TO_INDEX[l["category_id"]]
-            for l in label]
+    classes = [_COCO_CLASS_TO_INDEX[item["category_id"]] for item in label]
     return classes
 
 

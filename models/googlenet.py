@@ -1,21 +1,11 @@
 import warnings
 from collections import namedtuple
-from functools import partial
 from typing import Optional, Tuple, List, Callable, Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-
-#from ..transforms._presets import ImageClassification
-#from ..utils import _log_api_usage_once
-#from ._api import WeightsEnum, Weights
-#from ._meta import _IMAGENET_CATEGORIES
-#from ._utils import handle_legacy_interface, _ovewrite_named_param
-
-
-__all__ = ["GoogLeNet", "GoogLeNetOutputs", "_GoogLeNetOutputs", "GoogLeNet_Weights", "googlenet"]
 
 
 GoogLeNetOutputs = namedtuple("GoogLeNetOutputs", ["logits", "aux_logits2", "aux_logits1"])
@@ -280,6 +270,6 @@ class BasicConv2d(nn.Module):
         return x
 
 def googlenet(**kwargs: Any) -> GoogLeNet:
-    model = GoogLeNet(aux_logits = False, **kwargs)
+    model = GoogLeNet(aux_logits=False, **kwargs)
     return model
 
