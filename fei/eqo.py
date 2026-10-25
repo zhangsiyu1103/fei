@@ -112,11 +112,11 @@ def generate_attribution(
     variant: str = "VM",
     areas: Sequence[float] = (0.1, 0.3, 0.5, 0.7, 0.9),
     iterations: int = 100,
-    learning_rate: float = 0.05,
+    learning_rate: float = 0.1,
     area_weight: float = 0.1,
     reference_fn: ReferenceFn = random_solid_reference,
     model_kind: Optional[str] = None,
-    deit_mode: str = "residual",
+    deit_mode: str = "attention",
     use_amp: bool = False,
     return_stages: bool = False,
 ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]]:

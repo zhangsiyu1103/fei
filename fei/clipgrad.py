@@ -24,7 +24,7 @@ class ClipGrad:
         model: nn.Module,
         variant: str,
         model_kind: Optional[str] = None,
-        deit_mode: str = "residual",
+        deit_mode: str = "attention",
     ) -> None:
         variant = variant.upper()
         if variant not in SUPPORTED_VARIANTS:

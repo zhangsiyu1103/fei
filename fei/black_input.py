@@ -49,10 +49,10 @@ def evaluate_black_input_induction(
     variant: str = "NONE",
     areas: Sequence[float] = (0.1, 0.3, 0.5, 0.7, 0.9),
     iterations: int = 100,
-    learning_rate: float = 0.05,
+    learning_rate: float = 0.1,
     area_weight: float = 0.1,
     model_kind: Optional[str] = None,
-    deit_mode: str = "residual",
+    deit_mode: str = "attention",
     use_amp: bool = False,
 ) -> BlackInputInductionResult:
     """Evaluate target induction from normalized all-black RGB inputs.

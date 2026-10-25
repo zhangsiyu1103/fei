@@ -27,7 +27,7 @@ Interpretation).
 | Clean-support intervention $\rho$ (Sec. 4.1, Table 3, Supp. B) | `pathway_ratio`, `torchvision_channel_split` |
 | Activation-trajectory similarity (Sec. 4.2, Table 4) | `activation_trajectory_similarity` |
 | All-black-input target induction (Sec. 6.2, Table 2, Supp. K) | `evaluate_black_input_induction` |
-| DeiT-Small token intervention $\rho_{\mathrm{token}}$ and last-attention match (Sec. 6.5, Table 5, Supp. G) | `token_pathway_ratio`, `deit_cls_attention_map` |
+| DeiT-Small token intervention $\rho_{\mathrm{token}}$ and last-attention match (Sec. 6.5, Table 5, Supp. G) | `token_pathway_ratio`, `activation_trajectory_similarity` |
 
 ## Contents
 
@@ -36,8 +36,8 @@ Interpretation).
 - `fei/pathway.py`: clean-channel selection, the pathway ratio $\rho$, and the
   DeiT token-level analogue $\rho_{\mathrm{token}}$.
 - `fei/activation.py`: activation-trajectory similarity (cosine and MSE
-  against the clean trajectory) and the DeiT CLS-attention extraction used
-  for last-attention activation matching.
+  against the clean trajectory) and a helper for head-averaged DeiT CLS
+  attention maps.
 - `fei/black_input.py`: the all-black-input target-induction evaluation.
 - `examples/minimal_example.py`: a self-contained run on a small CNN.
 - `tests/test_core.py`: CPU checks for mask shape, range, nesting, hook
@@ -85,7 +85,7 @@ attribution = generate_attribution(
     variant="VM",                 # NONE, VM, IBM, IVM, or AVM
     areas=(0.1, 0.3, 0.5, 0.7, 0.9),
     iterations=100,
-    learning_rate=0.05,
+    learning_rate=0.1,
     area_weight=0.1,
     reference_fn=random_solid_reference,
 )
@@ -95,11 +95,14 @@ attribution = generate_attribution(
 values in `[0, 1]`. Each optimized mask starts from the preceding area level,
 so the sequence is spatially nested; the returned attribution is their mean.
 
-The optimizer maximizes the selected entry of the model output, so the model
-should return the score used by the intended protocol. Pass a model whose
-output is class probability (for example, `torch.nn.Sequential(model,
-torch.nn.Softmax(dim=1))`) when optimizing probability, or the plain model when
-optimizing a logit.
+The optimizer maximizes the selected entry of the model output. The paper's
+experiments pass the plain classifier, so EQO maximizes the target logit, and
+the resulting maps are scored with softmax probability. To optimize probability
+instead, pass `torch.nn.Sequential(model, torch.nn.Softmax(dim=1))`.
+
+The defaults match the paper's main CNN setting: Adam with a cosine-annealed
+learning rate starting at 0.1, 100 iterations per area level, and area weight
+0.1. The ConvNeXt-Tiny study used `learning_rate=0.05`.
 
 ## Clean-pathway diagnostic ($\rho$)
 
@@ -139,14 +142,18 @@ print(result.mse, result.cosine)
 
 This hooks the given layers, runs one clean and one perturbed forward pass,
 and reports per-layer cosine similarity (directional alignment) and MSE
-(magnitude preservation) between the two, averaged over the batch. This is the
-comparison reported in Table 4. Pass the same module used to build a
-`ChannelSplit` or `TokenSplit` to compare at the diagnostic's own interface.
+(magnitude preservation) between the two, averaged over the batch. Table 4
+averages this comparison over the steps of the zero-reference insertion
+trajectory (1,792 pixels per step), using the final convolutional block. Pass
+the same module used to build a `ChannelSplit` or `TokenSplit` to compare at
+the diagnostic's own interface.
 
-For DeiT, `deit_cls_attention_map` extracts the head-averaged CLS-to-patch row
-from a post-softmax attention tensor (`[B, heads, tokens, tokens]`); feed the
-clean and perturbed maps it returns into the same cosine/MSE comparison to
-compute the last-attention activation match.
+For the DeiT last-attention match in Table 5, pass the final attention module
+(`layers=[deit_model.blocks[-1].attn]`): the comparison uses its full output
+(all tokens, after the output projection). `deit_cls_attention_map` is an
+additional helper that extracts the head-averaged CLS-to-patch row from a
+post-softmax attention tensor (`[B, heads, tokens, tokens]`); the paper's
+numbers do not use it.
 
 ## All-black-input target induction
 
@@ -200,8 +207,9 @@ mapping an input batch to a same-shaped reference batch can be supplied.
 **Architectures.** Ordinary ReLU/GELU CNNs need no architecture name. Use
 `model_kind="convnext-tiny"` for ConvNeXt-Tiny and `model_kind="deit-small"`
 for DeiT-Small. For DeiT, `deit_mode` chooses where ClipGrad is applied:
-`residual` (block outputs, the default), `attention` (attention-module
-outputs, used for the paper's DeiT-Small VM runs), `gelu`, or `both`.
+`attention` (the outputs of the attention modules in all 12 blocks, the
+default and the setting used for the paper's DeiT-Small VM runs), `residual`
+(block outputs), `gelu`, or `both`.
 
 ## Citation
 
