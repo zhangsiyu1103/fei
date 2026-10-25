@@ -39,7 +39,8 @@ Interpretation).
   against the clean trajectory) and a helper for head-averaged DeiT CLS
   attention maps.
 - `fei/black_input.py`: the all-black-input target-induction evaluation.
-- `examples/minimal_example.py`: a self-contained run on a small CNN.
+- `examples/minimal_example.py`: a self-contained run on a toy bright-square
+  detector.
 - `tests/test_core.py`: CPU checks for mask shape, range, nesting, hook
   cleanup, the unconstrained and VM execution paths, activation similarity,
   the black-input evaluation, and the token-level pathway diagnostic.
@@ -64,8 +65,11 @@ python -m unittest discover -s tests -v
 python examples/minimal_example.py
 ```
 
-The example uses a toy network and synthetic input, so it downloads no data or
-weights. A CUDA model and CUDA input can be used without changing the API.
+The example uses a hand-built toy detector and synthetic images, so it
+downloads no data or weights and runs in seconds on a CPU. Each image holds one
+bright 4x4 square, and the example prints the share of the 16 top-ranked
+attribution pixels that fall inside it (100% for both variants). A CUDA model
+and CUDA input can be used without changing the API.
 
 ## Use with a model
 
