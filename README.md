@@ -184,7 +184,7 @@ the target batch.
 ```python
 from fei import timm_deit_token_split, token_pathway_ratio
 
-split = timm_deit_token_split(deit_model)  # standard timm VisionTransformer layout
+split = timm_deit_token_split(deit_model)  # tokens ablated after block 8 (0-indexed), as in the paper
 result = token_pathway_ratio(split, image, attribution, target)
 print(result.rho_token, result.selected_tokens)
 ```
@@ -192,9 +192,12 @@ print(result.rho_token, result.selected_tokens)
 This mirrors `pathway_ratio` with the ablation unit changed from a
 convolutional channel to a patch-token embedding: the same clean top-1 target,
 the same greedy steepest-descent selection, and the same insertion-trajectory
-construction. `timm_deit_token_split` assumes the standard timm
-`VisionTransformer` module layout (`patch_embed`, `cls_token`, `pos_embed`,
-`pos_drop`, `blocks`, `norm`, `head`); build a `TokenSplit` directly for a
+construction. The selected patch-token embeddings are zeroed at the output of
+block 8 (0-indexed, the ninth of twelve DeiT-Small blocks); the CLS token is
+never ablated. Pass `split_block` to choose another block, or `-1` to ablate
+the embeddings before the first block. `timm_deit_token_split` assumes the
+standard timm `VisionTransformer` module layout (`patch_embed`, `cls_token`,
+`pos_embed`, `blocks`, `norm`, `head`); build a `TokenSplit` directly for a
 different implementation.
 
 ## Options

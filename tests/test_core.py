@@ -14,6 +14,7 @@ from fei import (
     generate_attribution,
     pathway_ratio,
     select_clean_tokens,
+    timm_deit_token_split,
     token_pathway_ratio,
     zero_reference,
 )
@@ -47,24 +48,35 @@ class TinyTokenBlock(nn.Module):
         return tokens + torch.tanh(self.linear(tokens))
 
 
+class TinyPatchEmbed(nn.Module):
+    """Returns patch tokens shaped [B, N, D], like timm's PatchEmbed."""
+
+    def __init__(self, dim: int) -> None:
+        super().__init__()
+        self.proj = nn.Conv2d(3, dim, kernel_size=4, stride=4)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.proj(inputs).flatten(2).transpose(1, 2)
+
+
 class TinyTokenTransformer(nn.Module):
     """A minimal ViT-shaped model with the layout ``timm_deit_token_split`` expects."""
 
     def __init__(self, dim: int = 6, num_patches: int = 4, num_classes: int = 3) -> None:
         super().__init__()
         self.dim = dim
-        self.patch_embed = nn.Conv2d(3, dim, kernel_size=4, stride=4)
+        self.patch_embed = TinyPatchEmbed(dim)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, dim))
         self.pos_drop = nn.Identity()
-        self.blocks = nn.Sequential(TinyTokenBlock(dim), TinyTokenBlock(dim))
+        self.blocks = nn.Sequential(*(TinyTokenBlock(dim) for _ in range(3)))
         self.norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, num_classes)
         nn.init.normal_(self.cls_token, std=0.02)
         nn.init.normal_(self.pos_embed, std=0.02)
 
     def _patch_tokens(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.patch_embed(inputs).flatten(2).transpose(1, 2)
+        return self.patch_embed(inputs)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         tokens = self._patch_tokens(inputs)
@@ -267,6 +279,17 @@ class TokenPathwayTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(torch.tensor(result.rho_token)))
         self.assertLess(result.split_max_abs_error, 1e-5)
         self.assertGreater(len(result.selected_tokens), 0)
+
+    def test_timm_deit_token_split_matches_forward(self) -> None:
+        with torch.no_grad():
+            expected = self.model(self.image)
+            for split_block in (-1, 0, 1):
+                split = timm_deit_token_split(self.model, split_block=split_block)
+                tokens = split.prefix(self.image)
+                self.assertEqual(tuple(tokens.shape), (1, 5, self.model.dim))
+                self.assertLess((split.suffix(tokens) - expected).abs().max().item(), 1e-5)
+        with self.assertRaises(ValueError):
+            timm_deit_token_split(self.model)  # default block 8 needs at least 10 blocks
 
     def test_deit_cls_attention_map_shape(self) -> None:
         attention = torch.rand(2, 3, 5, 5)  # [B, heads, tokens, tokens]

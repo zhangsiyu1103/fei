@@ -422,28 +422,52 @@ def token_pathway_ratio(
     )
 
 
-def timm_deit_token_split(model: nn.Module) -> TokenSplit:
+def timm_deit_token_split(model: nn.Module, split_block: int = 8) -> TokenSplit:
     """Build the token split for a timm-style DeiT-Small model.
 
-    Splits immediately after position-embedding addition and before the
-    transformer blocks -- the interface used for the paper's DeiT
-    token-intervention protocol. Assumes the standard timm
-    ``VisionTransformer`` layout (``patch_embed``, ``cls_token``,
-    ``pos_embed``, ``pos_drop``, ``blocks``, ``norm``, ``head``); adapt
-    ``prefix_fn``/``suffix_fn`` directly for a different implementation.
+    The prefix runs the patch embedding and blocks ``0..split_block``
+    (0-indexed); the suffix runs the remaining blocks, the final norm, and the
+    head. The default ``split_block=8`` is the interface used for the paper's
+    DeiT token-intervention protocol: patch tokens are ablated at the output of
+    the ninth of twelve blocks. ``split_block=-1`` splits before the first
+    block. Assumes the standard timm ``VisionTransformer`` layout
+    (``patch_embed``, ``cls_token``, ``pos_embed``, ``blocks``, ``norm``,
+    ``head``); build a ``TokenSplit`` directly for a different implementation.
     """
+    blocks = model.blocks
+    if not -1 <= split_block < len(blocks) - 1:
+        raise ValueError(
+            "split_block must lie in [-1, len(model.blocks) - 2] so that at "
+            "least one block remains downstream"
+        )
+
+    def embed(inputs: torch.Tensor) -> torch.Tensor:
+        tokens = model.patch_embed(inputs)
+        if hasattr(model, "_pos_embed"):
+            tokens = model._pos_embed(tokens)
+        else:
+            cls_token = model.cls_token.expand(tokens.shape[0], -1, -1)
+            tokens = torch.cat((cls_token, tokens), dim=1) + model.pos_embed
+            tokens = model.pos_drop(tokens)
+        for name in ("patch_drop", "norm_pre"):
+            layer = getattr(model, name, None)
+            if layer is not None:
+                tokens = layer(tokens)
+        return tokens
 
     def prefix_fn(inputs: torch.Tensor) -> torch.Tensor:
-        tokens = model.patch_embed(inputs)
-        cls_token = model.cls_token.expand(tokens.shape[0], -1, -1)
-        tokens = torch.cat((cls_token, tokens), dim=1)
-        tokens = tokens + model.pos_embed
-        return model.pos_drop(tokens)
+        tokens = embed(inputs)
+        for block in blocks[: split_block + 1]:
+            tokens = block(tokens)
+        return tokens
 
     def suffix_fn(tokens: torch.Tensor) -> torch.Tensor:
-        value = model.blocks(tokens)
-        value = model.norm(value)
-        return model.head(value[:, 0])
+        for block in blocks[split_block + 1 :]:
+            tokens = block(tokens)
+        tokens = model.norm(tokens)
+        if hasattr(model, "forward_head"):
+            return model.forward_head(tokens)
+        return model.head(tokens[:, 0])
 
     return TokenSplit(model=model, prefix_fn=prefix_fn, suffix_fn=suffix_fn, cls_offset=1)
 
