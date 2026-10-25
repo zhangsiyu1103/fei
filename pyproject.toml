@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fei"
+version = "1.0.0"
+description = "EQO, ClipGrad (FEI) and clean-pathway diagnostics for feature attribution (WACV 2027)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Siyu Zhang", email = "zhangsiyu@utexas.edu" },
+    { name = "Kenneth McMillan", email = "kenmcm@cs.utexas.edu" },
+]
+dependencies = ["torch>=2.0"]
+
+[project.urls]
+Repository = "https://github.com/zhangsiyu1103/fei"
+
+[tool.setuptools.packages.find]
+include = ["fei*"]
